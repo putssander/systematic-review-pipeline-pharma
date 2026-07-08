@@ -19,12 +19,19 @@ SHEET_NAME = "Blad1"
 
 DATA_DIR = ROOT / "data"
 TEXT_DIR = DATA_DIR / "text"
+# Drop manually downloaded PDFs here (e.g. paywalled papers fetched via university
+# access) named by record_id — `7493.pdf` or `7493_smith2022.pdf`. Step 2 uses them
+# as the full text instead of scraping the (blocked) publisher page. Git-ignored.
+PDF_DROP_DIR = ROOT / "manual_pdfs"
 PAPERS_JSONL = DATA_DIR / "step0_papers.jsonl"
 RESOLVED_JSONL = DATA_DIR / "step1_resolved.jsonl"
 TEXT_INDEX_JSONL = DATA_DIR / "step2_text_index.jsonl"
+# Worklist of papers whose Step-2 full text was blocked/thin — the shortlist to
+# download via university access (see pipeline/download_pdfs.py).
+MISSING_CSV = DATA_DIR / "missing_fulltext.csv"
 OUTPUT_XLSX = ROOT / "25 papers SP_screened.xlsx"
 
-for _d in (DATA_DIR, TEXT_DIR):
+for _d in (DATA_DIR, TEXT_DIR, PDF_DROP_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # Contact e-mail sent to the Crossref "polite pool" for faster, reliable service.

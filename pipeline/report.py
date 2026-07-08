@@ -43,6 +43,55 @@ def text_df() -> pd.DataFrame:
     return df[cols] if not df.empty else df
 
 
+# Below this many characters we treat Step-2 full text as effectively "missing" (a
+# blocked publisher page or a JS stub); the sheet abstract carried the screening.
+MIN_FULLTEXT_CHARS = 400
+# Step-2 methods that never yield usable body text.
+_FAILED_METHODS = {"http_error", "fetch_error", "no_url", "pdf-failed", "none"}
+
+
+def needs_fulltext(min_chars: int = MIN_FULLTEXT_CHARS) -> pd.DataFrame:
+    """Papers whose Step-2 full text is blocked or too thin to add anything over the
+    abstract — the shortlist to fetch via university access. Joined with title/DOI/URL
+    so the list is actionable on another machine. A `local-*` method (a PDF you already
+    dropped in) is never listed, even if short."""
+    idx = {str(e["record_id"]): e for e in read_jsonl(config.TEXT_INDEX_JSONL)}
+    if not idx:
+        return pd.DataFrame()
+    papers = {str(p["record_id"]): p for p in read_jsonl(config.PAPERS_JSONL)}
+    resolved = {str(r["record_id"]): r for r in read_jsonl(config.RESOLVED_JSONL)}
+    rows = []
+    for rid, e in idx.items():
+        method = e.get("method", "")
+        if str(method).startswith("local-"):
+            continue
+        if e.get("char_count", 0) >= min_chars and method not in _FAILED_METHODS:
+            continue
+        p, r = papers.get(rid, {}), resolved.get(rid, {})
+        rows.append({
+            "record_id": rid,
+            "short_title": p.get("short_title") or p.get("title", ""),
+            "doi": r.get("doi") or p.get("doi", ""),
+            "resolved_url": r.get("resolved_url") or p.get("link", ""),
+            "method": method,
+            "char_count": e.get("char_count", 0),
+        })
+    df = pd.DataFrame(rows)
+    return df.sort_values("record_id").reset_index(drop=True) if not df.empty else df
+
+
+def write_worklist(path=None, min_chars: int = MIN_FULLTEXT_CHARS):
+    """Write needs_fulltext() to CSV (config.MISSING_CSV by default) so a machine with
+    university access can download just those PDFs. Returns the Path, or None if every
+    paper already has usable full text."""
+    df = needs_fulltext(min_chars)
+    if df.empty:
+        return None
+    path = config.MISSING_CSV if path is None else path
+    df.to_csv(path, index=False)
+    return path
+
+
 def screen_df(backend: str) -> pd.DataFrame:
     return pd.DataFrame(read_jsonl(config.step3_jsonl(backend)))
 

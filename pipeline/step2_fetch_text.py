@@ -32,6 +32,32 @@ def _html_to_text(html: str, max_chars: int) -> str:
     return clean_text(soup.get_text(" "))[:max_chars]
 
 
+def find_local_pdf(rid: str):
+    """A manually downloaded PDF for this record, if one was dropped in
+    config.PDF_DROP_DIR. Matches `<rid>.pdf` first, then `<rid>_*`/`<rid>-*`/`<rid> *`
+    (any suffix) so files can keep a human-readable name after the id. Returns a Path
+    or None. Extension match is case-insensitive."""
+    d = config.PDF_DROP_DIR
+    if not d.exists():
+        return None
+    prefixed = []
+    for p in d.iterdir():
+        if not p.is_file() or p.suffix.lower() != ".pdf":
+            continue
+        if p.stem == rid:
+            return p                                   # exact id wins
+        if p.stem.startswith(rid) and p.stem[len(rid):len(rid) + 1] in ("_", "-", " "):
+            prefixed.append(p)
+    return sorted(prefixed)[0] if prefixed else None
+
+
+def read_local_pdf(path, allow_ocr: bool = True) -> dict:
+    """Extract text from a manually supplied PDF, same shape as fetch_text()."""
+    text, method = ocr.pdf_to_text(path.read_bytes(), allow_ocr=allow_ocr)
+    return {"source_url": str(path), "text": text[: config.MAX_FETCH_CHARS],
+            "method": f"local-{method}", "http_status": None}
+
+
 def fetch_text(url: str, allow_ocr: bool = True) -> dict:
     """Fetch one URL -> {text, method, http_status, source_url}."""
     url = clean_text(url)
@@ -86,14 +112,22 @@ def main() -> None:
         rid = str(r["record_id"])
         bar.set_postfix_str(f"rid={rid}")
         txt_path = config.TEXT_DIR / f"{rid}.txt"
-        if args.only_missing and txt_path.exists() and txt_path.stat().st_size > 200:
+        # A manually dropped PDF (e.g. a paywalled paper you downloaded via university
+        # access) always wins — you provided it on purpose, so it even overrides an
+        # --only-missing skip. Otherwise fetch the Step-1 resolved URL, then the sheet link.
+        local = find_local_pdf(rid)
+        if (args.only_missing and local is None
+                and txt_path.exists() and txt_path.stat().st_size > 200):
             index.append({"record_id": rid, "text_file": str(txt_path), "skipped": True})
             tqdm.write(f"rid={rid}  skipped (exists)")
             continue
 
-        # Prefer the Step-1 resolved URL; fall back to the sheet link.
-        url = r.get("resolved_url") or (papers.get(rid, {}) or {}).get("link", "")
-        res = fetch_text(url, allow_ocr=not args.no_ocr)
+        if local is not None:
+            url = str(local)
+            res = read_local_pdf(local, allow_ocr=not args.no_ocr)
+        else:
+            url = r.get("resolved_url") or (papers.get(rid, {}) or {}).get("link", "")
+            res = fetch_text(url, allow_ocr=not args.no_ocr)
         txt_path.write_text(res["text"], encoding="utf-8")
 
         entry = {
@@ -106,8 +140,9 @@ def main() -> None:
             "text_file": str(txt_path),
         }
         index.append(entry)
-        tqdm.write(f"rid={rid}  {res['method']:12s}  {entry['char_count']:>6} chars  {url[:60]}")
-        time.sleep(args.sleep)
+        tqdm.write(f"rid={rid}  {res['method']:14s}  {entry['char_count']:>6} chars  {url[:60]}")
+        if local is None:            # be polite to publishers; local files need no wait
+            time.sleep(args.sleep)
 
     write_jsonl(config.TEXT_INDEX_JSONL, index)
     from collections import Counter
