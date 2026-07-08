@@ -72,15 +72,22 @@ BACKENDS: dict[str, dict] = {
         # Set to "chat" for OpenAI-compatible servers that only speak chat.completions.
         "api_style": os.getenv("GPT_API_STYLE", "responses"),
     },
-    "qwen3-8b": {
+    # Generic local-qwen slot. The ACTUAL model is chosen by the notebook preset
+    # (any Ollama tag: qwen3:8b, qwen3.5:27b, qwen3.6:27b, ...) via QWEN_MODEL, so
+    # this one backend can be any qwen without renaming the comparison column.
+    "qwen": {
         # Default to HuggingFace so it "just works" on Colab with a GPU.
         # Set QWEN_BACKEND=openai to instead hit Ollama/LM Studio locally.
         "kind": os.getenv("QWEN_BACKEND", "hf"),
-        "model": os.getenv("QWEN_MODEL", "Qwen/Qwen3-8B"),
+        "model": os.getenv("QWEN_MODEL", "qwen3:8b"),
         # Used only when QWEN_BACKEND=openai (Ollama default port shown).
         "base_url": os.getenv("QWEN_BASE_URL", "http://localhost:11434/v1"),
         "api_key_env": "QWEN_API_KEY",  # Ollama ignores it; any value works.
         "api_style": "chat",
+        # Qwen3 defaults to a long <think> preamble that is slow and looks like a
+        # hang; the '/no_think' soft switch disables it for fast, clean JSON.
+        # Set QWEN_NO_THINK=0 to keep reasoning on.
+        "no_think": os.getenv("QWEN_NO_THINK", "1") == "1",
         # HF generation knobs (only used when kind == "hf").
         "hf_max_new_tokens": int(os.getenv("QWEN_MAX_NEW_TOKENS", "2048")),
         "hf_dtype": os.getenv("QWEN_DTYPE", "auto"),
@@ -88,7 +95,7 @@ BACKENDS: dict[str, dict] = {
     },
 }
 
-DEFAULT_BACKENDS = ["gpt-5.5", "qwen3-8b"]
+DEFAULT_BACKENDS = ["gpt-5.5", "qwen"]
 
 # Screening / fetching knobs
 MAX_ABSTRACT_CHARS = 8000

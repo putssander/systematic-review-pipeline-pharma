@@ -52,6 +52,11 @@ def _screen_openai(cfg: dict, system: str, prompt: str) -> dict:
     client = _openai_client(cfg)
     model = cfg["model"]
 
+    # Qwen3 (via Ollama/LM Studio) otherwise emits a long <think> block per paper,
+    # which is slow and looks like a hang. The '/no_think' soft switch turns it off.
+    if cfg.get("no_think"):
+        system = f"{system}\n/no_think"
+
     if cfg.get("api_style") == "responses":
         resp = client.responses.create(
             model=model,
