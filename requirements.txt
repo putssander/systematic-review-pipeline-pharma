@@ -1,0 +1,18 @@
+# Core pipeline (Steps 0-2, merge, notebook) - always needed
+openpyxl>=3.1
+pandas>=2.0
+requests>=2.31
+beautifulsoup4>=4.12
+tqdm>=4.66
+pymupdf>=1.24          # PDF text-layer extraction (imported as 'fitz')
+python-dotenv>=1.0
+
+# LLM backends
+openai>=1.40           # GPT-5.5 + any OpenAI-compatible server (Ollama / LM Studio / GLM)
+
+# --- Optional: qwen3-8b via HuggingFace transformers (Colab GPU) ---
+# Install these only when QWEN_BACKEND=hf. On Colab a GPU runtime already has torch.
+# transformers>=4.51
+# torch>=2.3
+# accelerate>=0.30
+# bitsandbytes>=0.43   # only for 4-bit (QWEN_4BIT=1) on smaller GPUs (e.g. T4)
