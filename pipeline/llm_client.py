@@ -40,7 +40,10 @@ def _openai_client(cfg: dict):
     from openai import OpenAI  # lazy
 
     api_key = os.getenv(key_env) or "not-needed"  # local servers ignore the key
-    kwargs = {"api_key": api_key}
+    # timeout + bounded retries so a wedged local generation raises instead of hanging
+    # the whole step (non-streaming, so the read timeout fires after N seconds of no data).
+    kwargs = {"api_key": api_key, "timeout": config.LLM_TIMEOUT,
+              "max_retries": config.LLM_MAX_RETRIES}
     if cfg.get("base_url"):
         kwargs["base_url"] = cfg["base_url"]
     client = OpenAI(**kwargs)
@@ -70,7 +73,7 @@ def _screen_openai(cfg: dict, system: str, prompt: str) -> dict:
                 "strict": True,
                 "schema": SCREENING_SCHEMA,
             }},
-            max_output_tokens=2000,
+            max_output_tokens=config.LLM_MAX_TOKENS,
         )
         if getattr(resp, "status", None) == "incomplete":
             raise RuntimeError(f"Incomplete response: {resp.incomplete_details}")
@@ -88,7 +91,10 @@ def _screen_openai(cfg: dict, system: str, prompt: str) -> dict:
         None,
     ):
         try:
-            kwargs = {"model": model, "messages": messages, "temperature": 0}
+            # max_tokens caps Ollama's num_predict so a looping model can't run to the
+            # end of its context window (the classic "screening hangs on one paper").
+            kwargs = {"model": model, "messages": messages, "temperature": 0,
+                      "max_tokens": config.LLM_MAX_TOKENS}
             if response_format is not None:
                 kwargs["response_format"] = response_format
             resp = client.chat.completions.create(**kwargs)

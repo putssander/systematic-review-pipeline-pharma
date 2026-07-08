@@ -110,6 +110,18 @@ MAX_FETCH_CHARS = 16000
 REQUEST_TIMEOUT = 20
 USER_AGENT = "screening-pipeline/1.0 (+https://doi.org; mailto:%s)" % CROSSREF_MAILTO
 
+# Per-call LLM guardrails so one stuck generation can't hang the whole run.
+#   LLM_MAX_TOKENS is the PRIMARY guard: it caps output so a runaway/looping model
+#     stops at ~2000 tokens (~1-1.5 min) instead of filling its whole context window.
+#   LLM_TIMEOUT is only a BACKSTOP for a wedged/dead connection, so it's set well above
+#     a legit slow call (qwen3:8b on a Colab T4 is ~50s/paper, worst case ~90-100s with
+#     a big full-text prompt). At 300s a real paper is never killed; a truly dead call
+#     becomes a per-paper error (needs_human_review) and the run continues, resumable
+#     with --only-missing. Lower LLM_TIMEOUT only if your box is much faster.
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "300"))       # seconds per screening call (backstop)
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "1"))   # SDK retries on 5xx/conn errors
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))  # output cap (Ollama num_predict)
+
 # OCR for scanned PDFs. Default = FREE, keyless, local glm-ocr on Ollama
 # (https://ollama.com/library/glm-ocr): `ollama pull glm-ocr`. It speaks the
 # OpenAI-compatible API, so no API key is required.
